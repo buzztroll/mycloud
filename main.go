@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"strings"
 )
 
 type CommandOptions struct {
@@ -65,6 +67,10 @@ func (c *BaseCloud) cloudDescription() string {
 
 func (c *BaseCloud) isEffectiveCloud() bool {
 	return c.isMyCloud
+}
+
+func (c *BaseCloud) supportsKeys() bool {
+	return c.supportsKey
 }
 
 func (c *BaseCloud) getKey(key string) (*string, error) {
@@ -125,6 +131,19 @@ func NewOpenStackCloud() OpenStackCloud {
 	return c
 }
 
+func (c *OpenStackCloud) getKey(key string) (*string, error) {
+
+	dec := json.NewDecoder(strings.NewReader(*c.metadata))
+
+	var m map[string]string
+	dec.Decode(&m)
+	v := m[key]
+	if v == "" {
+		return nil, errors.New("No such key " + key)
+	}
+	return &v, nil
+}
+
 /////////////////////////////////////////////////////////
 // Digital Ocean
 /////////////////////////////////////////////////////////
@@ -148,6 +167,13 @@ type GCECloud struct {
 	BaseCloud
 }
 
+func NewGCECloud() GCECloud {
+	c := GCECloud{}
+	c.supportsKey = true
+	c.name = "GCE"
+	return c
+}
+
 func (c *GCECloud) detectEffectiveCloud() {
 	c.supportsKey = true
 	url := "http://metadata.google.internal/"
@@ -168,6 +194,22 @@ func (c *GCECloud) getKey(key string) (*string, error) {
 	return metadata, err
 }
 
+/////////////////////////////////////////////////////////
+// GCE
+/////////////////////////////////////////////////////////
+type AzureCloud struct {
+	BaseCloud
+}
+
+func (c *AzureCloud) detectEffectiveCloud() {
+	c.supportsKey = true
+
+	c.isMyCloud = false
+	if _, err := os.Stat("/var/lib/waagent/ovf-env.xml"); err == nil {
+		c.isMyCloud = true
+	}
+}
+
 ///////
 
 func detectEffectiveCloud(wg *sync.WaitGroup, cd CloudDetector) {
@@ -178,17 +220,21 @@ func detectEffectiveCloud(wg *sync.WaitGroup, cd CloudDetector) {
 type CloudDetector interface {
 	detectEffectiveCloud()
 	isEffectiveCloud() bool
+	supportsKeys() bool
 	cloudDescription() string
 	getKey(string) (*string, error)
 }
 
 func setupClouds() []CloudDetector {
 	awsCloud := NewAWSCloud()
-	gceCloud := GCECloud{BaseCloud{name: "GCE", isMyCloud: false}}
+	gceCloud := NewGCECloud()
+	azureCloud := AzureCloud{BaseCloud{name: "Azure"}}
 	openStackCloud := NewOpenStackCloud()
 	digitalOceanCloud := NewDigitalOceanCloud()
-	cdList := []CloudDetector{&awsCloud,
+	cdList := []CloudDetector{
+		&awsCloud,
 		&gceCloud,
+		&azureCloud,
 		&openStackCloud,
 		&digitalOceanCloud}
 	return cdList
@@ -208,7 +254,16 @@ the following values to stdout:
 
 	usageMessage = usageMessage + `
 Optionally this can be used to fetch keys from the clouds metadata server on the
-clouds that support it.
+clouds that support it.  The following clouds support fetching specific metadata
+keys:
+`
+	for _, cd := range cdList {
+		if cd.supportsKeys() {
+			usageMessage = usageMessage + "\t" + cd.cloudDescription() + "\n"
+		}
+	}
+
+	usageMessage = usageMessage + `
 
 [options]
 `
