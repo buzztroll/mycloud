@@ -11,6 +11,7 @@ running.  The following clouds are supported:
 | Azure                   | Azure         |
 | OpenStack               | OpenStack     |
 | Digital Ocean           | DigitalOcean  |
+| Joyent                  | Joyent        |
 
 If the cloud on which *mycloud* is run is not in the above list, or
 the program fails to detect the cloud the string *UNKNOWN* is writen to
@@ -28,6 +29,7 @@ of the cloud's metadata server:
 - GCE
 - OpenStack
 - DigitalOcean
+- Joyent
 
 ```{r, engine='bash'}
 $ ./mycloud-Linux-x86_64 --key ami-id

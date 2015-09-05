@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"strings"
+	"os/exec"
 )
 
 type CommandOptions struct {
@@ -210,6 +211,39 @@ func (c *AzureCloud) detectEffectiveCloud() {
 	}
 }
 
+/////////////////////////////////////////////////////////
+// Joyent
+/////////////////////////////////////////////////////////
+type JoyentCloud struct {
+	BaseCloud
+}
+
+func NewJoyentCloud() JoyentCloud {
+	c := JoyentCloud{}
+	c.supportsKey = true
+	c.name = "Joyent"
+	return c
+}
+
+func (c *JoyentCloud) detectEffectiveCloud() {
+	c.supportsKey = true
+
+	c.isMyCloud = false
+	if _, err := os.Stat("/usr/sbin/mdata-get"); err == nil {
+		c.isMyCloud = true
+	}
+}
+
+func (c *JoyentCloud) getKey(key string) (*string, error) {
+	var cmd string = "/usr/sbin/mdata-get"
+	out, err := exec.Command(cmd, key).Output()
+	if err != nil {
+		return nil, err
+	}
+	s := string(out)
+	return &s, nil
+}
+
 ///////
 
 func detectEffectiveCloud(wg *sync.WaitGroup, cd CloudDetector) {
@@ -231,12 +265,14 @@ func setupClouds() []CloudDetector {
 	azureCloud := AzureCloud{BaseCloud{name: "Azure"}}
 	openStackCloud := NewOpenStackCloud()
 	digitalOceanCloud := NewDigitalOceanCloud()
+	joyentCloud := NewJoyentCloud()
 	cdList := []CloudDetector{
 		&awsCloud,
 		&gceCloud,
 		&azureCloud,
 		&openStackCloud,
-		&digitalOceanCloud}
+		&digitalOceanCloud,
+		&joyentCloud}
 	return cdList
 }
 
